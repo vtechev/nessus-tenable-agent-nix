@@ -1,0 +1,11 @@
+# The example .deb is huge (~20 MiB). In real usage you will fetch it via debUrl.
+# Keep it for local testing but don't force it into every clone.
+# Comment the next line if you really want to commit the .deb.
+NessusAgent-*.deb
+
+result
+result-*
+.direnv
+.envrc
+*.swp
+*~
