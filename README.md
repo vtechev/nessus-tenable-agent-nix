@@ -29,7 +29,8 @@ NixOS module + package for the Tenable Nessus Agent, designed for corporate / fi
             enable = true;
 
             # Point at your internal, firewall-approved location
-            debUrl  = "https://artifacts.internal.company.com/tenable/NessusAgent-11.2.0-ubuntu1804_aarch64.deb";
+            # Use the _amd64 or _aarch64 build that matches the target machines.
+            debUrl  = "https://artifacts.internal.company.com/tenable/NessusAgent-11.2.0-ubuntu1804_amd64.deb";
             debHash = "sha256-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX=";
 
             registration = {
@@ -87,7 +88,8 @@ systemctl start nessus-agent-register
 services.nessus-agent = {
   enable = true;
   package = pkgs.callPackage ./pkgs/nessus-agent {
-    debSrc = ./NessusAgent-11.2.0-ubuntu1804_aarch64.deb;
+    # Must match the architecture of the machine you will deploy to.
+    debSrc = ./NessusAgent-11.2.0-ubuntu1604_amd64.deb; # or the _aarch64 variant
   };
 
   registration = { ... };
@@ -103,7 +105,9 @@ services.nessus-agent = {
 
 ## Supported platforms
 
-The example `.deb` in this repo is `arm64` (Ubuntu 18.04 baseline). The derivation itself is generic — just feed it the correct architecture `.deb` for your fleet (`x86_64`, `aarch64`, etc.).
+The example `.deb`s in this repo are Ubuntu baseline builds for amd64 and aarch64. The derivation is generic — you **must** feed it a .deb whose architecture matches the target system (`x86_64-linux` vs `aarch64-linux`), otherwise the service will fail at start with "cannot execute binary file".
+
+See the warning in the examples and the architecture guard in `pkgs/nessus-agent`.
 
 ## License
 

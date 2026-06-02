@@ -18,6 +18,10 @@ let
       procps
       nettools
       iproute2
+      # Provide a dynamic linker at the classic FHS locations (/lib, /lib64)
+      # so that binaries that still carry the stock Ubuntu interpreter
+      # (or that dlopen via FHS paths) can run inside the environment.
+      glibc
       # Common runtime deps that enterprise agents often pull in
       stdenv.cc.cc.lib
       zlib

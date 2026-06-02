@@ -14,12 +14,17 @@
     enable = true;
 
     # === Option A: Corporate / firewall-friendly remote .deb ===
-    # debUrl = "https://repo.internal.company.com/tenable/NessusAgent-11.2.0-ubuntu1804_aarch64.deb";
+    # (pick the _amd64 or _aarch64 build that matches the target machines)
+    # debUrl = "https://repo.internal.company.com/tenable/NessusAgent-11.2.0-ubuntu1804_amd64.deb";
     # debHash = "sha256-...=";
 
     # === Option B: Local .deb (development) ===
+    # IMPORTANT: the .deb must be for the same architecture as the machine
+    # you are deploying to (amd64 on x86_64, aarch64 on arm64).  Using the
+    # wrong one produces a package that will later fail with
+    # "cannot execute binary file".
     package = pkgs.callPackage ../../pkgs/nessus-agent {
-      debSrc = ../../NessusAgent-11.2.0-ubuntu1804_aarch64.deb;
+      debSrc = ../../NessusAgent-11.2.0-ubuntu1604_amd64.deb;  # use the _aarch64 variant on arm64
     };
 
     registration = {
