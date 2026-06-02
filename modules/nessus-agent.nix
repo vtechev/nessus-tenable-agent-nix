@@ -126,19 +126,48 @@ WRAPPER
     echo "Nessus Agent registration complete."
   '';
 
-  # Substitute placeholders in the register script for this config
-  registerScriptFinal = pkgs.substituteAll {
+  # Substitute placeholders in the register script for this config.
+  # Uses replaceVarsWith (successor to the removed substituteAll) with
+  # a conditionally-built replacements set so that we only provide
+  # entries for @PLACEHOLDER@s that actually appear in the generated
+  # script text (the script template uses optionalString to include
+  # some @VAR@ lines only for certain config values). This satisfies
+  # replaceVarsWith's strict --replace-fail + leftover-@ check.
+  registerScriptFinal = pkgs.replaceVarsWith {
     src = registerScript;
-    KEY = if cfg.registration.keyFile != null then "$(cat ${cfg.registration.keyFile})" else cfg.registration.key;
-    HOST = cfg.registration.host;
-    PORT = toString cfg.registration.port;
-    NAME = cfg.registration.name or "";
-    GROUPS = concatStringsSep "," cfg.registration.groups;
-    PROXY_HOST = cfg.registration.proxyHost or "";
-    PROXY_PORT = toString (cfg.registration.proxyPort or "");
-    PROXY_USER = cfg.registration.proxyUsername or "";
-    PROXY_PASSWORD_FILE = cfg.registration.proxyPasswordFile or "";
-    ENV_FILE = cfg.environmentFile or "";
+    replacements =
+      {
+        KEY =
+          if cfg.registration.keyFile != null
+          then "$(cat ${cfg.registration.keyFile})"
+          else cfg.registration.key;
+        HOST = cfg.registration.host;
+        PORT = toString cfg.registration.port;
+      }
+      // optionalAttrs (cfg.registration.name != null) {
+        NAME = cfg.registration.name;
+      }
+      // optionalAttrs (cfg.registration.groups != []) {
+        GROUPS = concatStringsSep "," cfg.registration.groups;
+      }
+      // optionalAttrs (cfg.registration.proxyHost != null) (
+        {
+          PROXY_HOST = cfg.registration.proxyHost;
+        }
+        // optionalAttrs (cfg.registration.proxyPort != null) {
+          PROXY_PORT = toString cfg.registration.proxyPort;
+        }
+      )
+      // optionalAttrs (cfg.registration.proxyUsername != null) {
+        PROXY_USER = cfg.registration.proxyUsername;
+      }
+      // optionalAttrs (cfg.registration.proxyPasswordFile != null) {
+        PROXY_PASSWORD_FILE = cfg.registration.proxyPasswordFile;
+      }
+      // optionalAttrs (cfg.environmentFile != null) {
+        ENV_FILE = cfg.environmentFile;
+      };
+    isExecutable = true;
   };
 
   # The actual systemd unit for the agent daemon
