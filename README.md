@@ -99,7 +99,7 @@ services.nessus-agent = {
 ## Architecture notes
 
 - The agent is distributed only as `.deb`/`.rpm`/`.dmg`/`.exe`. We extract the deb with `dpkg-deb`.
-- All important paths inside the agent are hard-coded to `/opt/nessus_agent`. We satisfy this with a tmpfiles symlink + an FHS wrapper (`buildFHSEnv`).
+- All important paths inside the agent are hard-coded to `/opt/nessus_agent`. We satisfy this with a full recursive copy (via systemd-tmpfiles R+C) into a mutable location + an FHS wrapper (`buildFHSEnv`).
 - The core plugins bundle is extracted at build time (equivalent to what the `.deb`'s `postinst` does with `nessuscli install`).
 - Registration is performed by a separate oneshot unit so it can be retried independently of the main daemon and can read secrets from `environmentFile` or `keyFile`.
 

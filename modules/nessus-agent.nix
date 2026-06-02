@@ -30,21 +30,16 @@ let
       # Add more here if the agent complains about missing .so at runtime
     ];
     extraInstallCommands = ''
-      # Provide a mixed /opt/nessus_agent view inside the FHS rootfs, mirroring the
-      # host tmpfiles structure (ro symlinks for code, real dirs for state).
-      # At runtime the bwrap --bind for host /opt will overlay the host's (writable
-      # state) view, but having a consistent structure in the rootfs helps for any
-      # early lookups or interactive `nessus-agent-fhs` sessions.
-      mkdir -p $out/opt/nessus_agent
-      ln -s ${realPackage}/opt/nessus_agent/bin $out/opt/nessus_agent/bin
-      ln -s ${realPackage}/opt/nessus_agent/sbin $out/opt/nessus_agent/sbin
-      ln -s ${realPackage}/opt/nessus_agent/lib $out/opt/nessus_agent/lib
-      ln -s ${realPackage}/opt/nessus_agent/etc $out/opt/nessus_agent/etc
-
-      mkdir -p $out/opt/nessus_agent/com/nessus/CA
-      mkdir -p $out/opt/nessus_agent/var/nessus
-      # (state subdirs like logs/ etc. will be empty in the rootfs; host bind provides the real ones)
-
+      # We intentionally do not create any /opt/nessus_agent tree (or symlinks
+      # into the store package) inside the FHS rootfs here.
+      #
+      # At runtime the bwrap wrapper auto-binds host top-level directories that
+      # are not explicitly provided by the rootfs output. Because we no longer
+      # seed /opt from extraInstallCommands, the host's /opt (a full recursive
+      # copy of the package tree, see the tmpfiles R+C rules below) is bound
+      # read-write into the environment. This is exactly what the agent needs
+      # at its hard-coded /opt/nessus_agent prefix.
+      #
       # Convenience wrappers so "nessuscli" and "nessus-service" just work
       # when users enter the FHS or when we invoke them from systemd.
       mkdir -p $out/bin
@@ -223,10 +218,13 @@ WRAPPER
     ProtectHome = "read-only";
     NoNewPrivileges = true;
 
-    # The agent (and its registration) need to create state under the install prefix
-    # (var/nessus/* for logs/state, com/ for comms). Whitelist it so ProtectSystem/ProtectHome
-    # don't make the prefix ro for this service. The tmpfiles above ensure the state subdirs
-    # are real (rw) dirs while code subdirs are symlinks into the store.
+    # The agent (and its registration) need to create/write files under the
+    # install prefix (pid files, logs, link state under var/nessus/*, comms
+    # under com/, etc.). Whitelist it so that ProtectSystem/ProtectHome (and
+    # any other namespace restrictions) do not make the prefix read-only for
+    # this service. Our tmpfiles R+C copy ensures the entire tree under
+    # /opt/nessus_agent consists of real, writable files and directories on
+    # the host filesystem.
     ReadWritePaths = [ "/opt/nessus_agent" ];
 
     # Give it the FHS environment variables if needed
@@ -411,36 +409,31 @@ in
     );
 
     # The agent binary tree must be present at the path it was compiled for.
-    # We create a mixed /opt/nessus_agent tree via systemd-tmpfiles:
-    # - real directory for the prefix (on the host root fs, which is rw)
-    # - L+ symlinks only for the immutable code/config subtrees (bin, sbin, lib, etc.)
-    #   so they come from the current store package and update on upgrade
-    # - d (and L+ for static initial content) for the state subtrees (var/nessus/* and com/*)
-    #   so the agent can create/write its logs, state (master.key, users, etc.), tmp, etc.
-    # This replaces the previous full L+ symlink (which pointed the entire tree at the ro store).
-    # The FHS bwrap binds the host /opt (rw for the state parts), so the agent inside sees
-    # a writable prefix for the parts it needs while code remains immutable.
+    # We materialize a full copy of the package tree at /opt/nessus_agent via
+    # systemd-tmpfiles (R + C). This gives the agent a completely regular
+    # (non-symlinked) directory tree on the mutable host filesystem so it can
+    # create files such as var/nessus/nessus-service.pid, write logs, maintain
+    # its link state, etc.
+    #
+    # - "R /opt/nessus_agent" first removes anything that may be there
+    #   (including a legacy full L+ symlink from a previous version of this
+    #   module that pointed the whole prefix at the read-only store).
+    # - "C ..." then recursively copies the current ${realPackage} tree.
+    # - The copy runs on every activation (and boot), so code updates take
+    #   effect without a reboot and the tree always matches the active package.
+    #
+    # Trade-off: the agent's runtime/persistent state under the prefix is
+    # discarded on every switch (as well as the initial copy). The
+    # nessus-agent-register oneshot will notice the missing link state and
+    # re-register. This is acceptable per the requirements.
+    #
+    # Inside the FHS bwrap environment the host /opt is auto --bind mounted
+    # read-write (we no longer seed /opt inside the FHS rootfs), so the
+    # writable copy is visible to the agent and to the nessuscli wrapper.
     systemd.tmpfiles.rules = [
-      "d /opt/nessus_agent 0755 root root -"
-      "L+ /opt/nessus_agent/bin - - - - ${realPackage}/opt/nessus_agent/bin"
-      "L+ /opt/nessus_agent/sbin - - - - ${realPackage}/opt/nessus_agent/sbin"
-      "L+ /opt/nessus_agent/lib - - - - ${realPackage}/opt/nessus_agent/lib"
-      "L+ /opt/nessus_agent/etc - - - - ${realPackage}/opt/nessus_agent/etc"
-      "d /opt/nessus_agent/com 0755 root root -"
-      "d /opt/nessus_agent/com/nessus 0755 root root -"
-      "d /opt/nessus_agent/com/nessus/CA 0755 root root -"
-      "d /opt/nessus_agent/var 0755 root root -"
-      "d /opt/nessus_agent/var/nessus 0755 root root -"
-      # Static initial resources from the package (updated on upgrade via new ${realPackage})
-      "L+ /opt/nessus_agent/var/nessus/icudt77l.dat - - - - ${realPackage}/opt/nessus_agent/var/nessus/icudt77l.dat"
-      "L+ /opt/nessus_agent/var/nessus/nessus_org.pem - - - - ${realPackage}/opt/nessus_agent/var/nessus/nessus_org.pem"
-      "L+ /opt/nessus_agent/var/nessus/nessus-services - - - - ${realPackage}/opt/nessus_agent/var/nessus/nessus-services"
-      "L+ /opt/nessus_agent/var/nessus/tools - - - - ${realPackage}/opt/nessus_agent/var/nessus/tools"
-      # Writable state subdirs (agent creates logs, tmp files, user state, modules, etc. here)
-      "d /opt/nessus_agent/var/nessus/logs 0755 root root -"
-      "d /opt/nessus_agent/var/nessus/tmp 0755 root root -"
-      "d /opt/nessus_agent/var/nessus/users 0755 root root -"
-      "d /opt/nessus_agent/var/nessus/mod 0755 root root -"
+      "d /opt 0755 root root -"
+      "R /opt/nessus_agent - - - - -"
+      "C /opt/nessus_agent 0755 root root - ${realPackage}/opt/nessus_agent"
     ];
 
     systemd.services.nessusagent = {
