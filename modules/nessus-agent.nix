@@ -201,7 +201,7 @@ WRAPPER
     # Use -c so bash (our runScript) executes the string as a command rather
     # than treating the first token as a "script file" name. See the long
     # comment next to the fhsEnv definition.
-    ExecStart = "${fhsEnv}/bin/nessus-agent-fhs -c 'exec /bin/nessus-service -q'";
+    ExecStart = "${fhsEnv}/bin/nessus-agent-fhs -c '/opt/nessus_agent/sbin/nessus-service -q'";
 
     Restart = "on-abort";
     RestartSec = "10s";
